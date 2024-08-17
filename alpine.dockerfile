@@ -193,7 +193,7 @@ RUN apk update \
     && rm -rf /lib/apk/db/*
 
 # Install python dependencies for control scripts
-RUN python3 -m pip install --no-cache-dir \
+RUN python3 -m pip install --no-cache-dir --target=/usr/lib/python3.12/site-packages \
         python-mpd2
 #         PyGObject \
 #         dbus-python \
