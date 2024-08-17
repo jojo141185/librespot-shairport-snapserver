@@ -166,15 +166,40 @@ RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
 ###### BASE END ######
 
 ###### MAIN START ######
-FROM docker.io/alpine:${alpine_version}
+FROM python:alpine
 
 ENV S6_CMD_WAIT_FOR_SERVICES=1
 ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 
-RUN apk add --no-cache \
+RUN apk update \
+    && apk del .python-rundeps \
+    && apk add --no-cache \
             avahi \
             dbus \
+            # # Dependencies for building pip packages
+            # build-base \
+            # pkgconfig \
+            # cairo-dev \
+            # gobject-introspection-dev \
+            # dbus-dev \
+            # cmake \
+            # Python dependencies for control scripts
+            py3-gobject3 \
+            py3-dbus \
+            py3-musicbrainzngs \
+            py3-requests \
+            py3-websocket-client \
+            # py3-mpd2 is not available yet (only on edge repo)
     && rm -rf /lib/apk/db/*
+
+# Install python dependencies for control scripts
+RUN python3 -m pip install --no-cache-dir \
+        python-mpd2
+#         PyGObject \
+#         dbus-python \
+#         musicbrainzngs \
+#         requests \
+#         websocket-client
 
 # Copy extracted s6-overlay and libs from base
 COPY --from=base /command /command/

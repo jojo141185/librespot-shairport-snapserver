@@ -190,8 +190,33 @@ RUN apt-get update \
         ca-certificates \
         avahi-daemon \
         dbus\
+        # # Dependencies for building pip packages
+        # build-essential \
+        # pkg-config \
+        # libcairo2-dev \
+        # libgirepository1.0-dev \
+        # libdbus-1-dev \
+        # cmake \
+        # Python dependencies for control scripts
+        python3 \
+        python3-pip \
+        python3-gi \
+        python3-dbus \
+        python3-musicbrainzngs \
+        python3-mpd \
+        python3-requests \
+        python3-websocket \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Install python dependencies for control scripts
+# RUN python3 -m pip install --no-cache-dir --break-system-packages \
+#    PyGObject \
+#    dbus-python \
+#    musicbrainzngs \
+#    python-mpd2 \
+#    requests \
+#    websocket-client
 
 # Copy extracted s6-overlay and libs from base
 COPY --from=base /command /command/
