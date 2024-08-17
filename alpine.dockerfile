@@ -189,12 +189,12 @@ RUN apk update \
             py3-musicbrainzngs \
             py3-requests \
             py3-websocket-client \
-            # py3-mpd2 is not available yet (only on edge repo)
+            py3-mpd2@testing
     && rm -rf /lib/apk/db/*
 
-# Install python dependencies for control scripts
-RUN python3 -m pip install --no-cache-dir --target=/usr/lib/python3.12/site-packages \
-        python-mpd2
+# #Install python dependencies for control scripts
+# RUN python3 -m pip install --no-cache-dir --target=/usr/lib/python3.12/site-packages \
+#        python-mpd2
 #         PyGObject \
 #         dbus-python \
 #         musicbrainzngs \
