@@ -172,7 +172,8 @@ ENV S6_CMD_WAIT_FOR_SERVICES=1
 ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 
 RUN apk update \
-    && apk del .python-rundeps \
+    #&& apk del .python-rundeps \
+    && echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories \
     && apk add --no-cache \
             avahi \
             dbus \
