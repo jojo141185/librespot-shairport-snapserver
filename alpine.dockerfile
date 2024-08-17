@@ -189,7 +189,7 @@ RUN apk update \
             py3-musicbrainzngs \
             py3-requests \
             py3-websocket-client \
-            py3-mpd2@testing
+            py3-mpd2@testing \
     && rm -rf /lib/apk/db/*
 
 # #Install python dependencies for control scripts
