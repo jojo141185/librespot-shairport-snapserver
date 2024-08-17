@@ -190,6 +190,15 @@ RUN apt-get update \
         ca-certificates \
         avahi-daemon \
         dbus\
+        # Python dependencies for control scripts
+        python3 \
+        python3-pip \
+        python3-gi \
+        python3-dbus \
+        python3-musicbrainzngs \
+        python3-mpd \
+        python3-requests \
+        python3-websocket \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -203,6 +212,7 @@ COPY --from=base /tmp-libs/ /lib/x86_64-linux-gnu/
 # Copy all necessary files from the builders
 COPY --from=librespot /librespot/target/release/librespot /usr/local/bin/
 COPY --from=snapcast /snapcast/bin/snapserver /usr/local/bin/
+COPY --from=snapcast /snapcast/server/etc/plug-ins /usr/share/snapserver/plug-ins
 COPY --from=snapcast /snapweb/dist /usr/share/snapserver/snapweb
 COPY --from=shairport /shairport/build/shairport-sync /usr/local/bin/
 COPY --from=shairport /nqptp/nqptp /usr/local/bin/
