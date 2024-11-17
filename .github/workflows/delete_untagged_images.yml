@@ -20,7 +20,7 @@ jobs:
           password: ${{ secrets.ACTIONS_WORKFLOW_PAT }}
 
       - name: Delete all images from repository without tags
-        uses: Chizkiyahu/delete-untagged-ghcr-action@v4.0.1
+        uses: Chizkiyahu/delete-untagged-ghcr-action@v5.0.0
         with:
           token: ${{ secrets.ACTIONS_WORKFLOW_PAT }}
           repository_owner: ${{ github.repository_owner }}
