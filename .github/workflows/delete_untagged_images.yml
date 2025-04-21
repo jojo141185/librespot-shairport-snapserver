@@ -17,12 +17,12 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.PAT_TOKEN }}
+          password: ${{ secrets.ACTIONS_WORKFLOW_PAT }}
 
       - name: Delete all images from repository without tags
         uses: Chizkiyahu/delete-untagged-ghcr-action@v4.0.1
         with:
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.ACTIONS_WORKFLOW_PAT }}
           repository_owner: ${{ github.repository_owner }}
           repository: ${{ github.repository }}
           package_name: ${{ env.PACKAGE_NAME }}
