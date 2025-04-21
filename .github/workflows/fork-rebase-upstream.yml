@@ -1,0 +1,87 @@
+name: Rebase Upstream onto Branches
+
+on:
+  schedule:
+    - cron: '0 3 * * *'      # Runs daily at 03:00 UTC
+  workflow_dispatch:        # Allows manual triggering
+
+permissions:
+  contents: write           # Required for git push --force-with-lease
+  pull-requests: write      # Required for gh pr create
+
+jobs:
+  rebase-branches:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: [development, master]  # Sync both branches
+
+    steps:
+      - name: Checkout repository - ${{ matrix.branch }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ matrix.branch }}
+          # Token is needed if the repo is private, or for gh cli later
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add upstream remote and fetch ${{ matrix.branch }}
+        run: |
+          git remote add upstream https://github.com/yubiuser/librespot-shairport-snapserver.git
+          git fetch upstream ${{ matrix.branch }}
+
+      - name: Configure Git user for rebase
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions"
+
+      - name: Attempt rebase ${{ matrix.branch }} onto upstream/${{ matrix.branch }}
+        id: rebase_attempt
+        # Allow the workflow to continue even if rebase fails, so we can handle the failure
+        continue-on-error: true
+        run: |
+          echo "Attempting rebase of ${{ matrix.branch }} onto upstream/${{ matrix.branch }}"
+          git rebase upstream/${{ matrix.branch }}
+
+      - name: Push rebased branch if rebase was successful
+        if: steps.rebase_attempt.outcome == 'success'
+        run: |
+          echo "Rebase successful for ${{ matrix.branch }}. Pushing branch."
+          git push --force-with-lease origin ${{ matrix.branch }}
+
+      - name: Handle Rebase Conflicts
+        if: steps.rebase_attempt.outcome == 'failure'
+        run: |
+          echo "Rebase failed for branch ${{ matrix.branch }} with conflicts."
+          echo "Aborting rebase and creating conflict notification PR."
+
+          # 1. Abort the failed rebase to clean the state
+          git rebase --abort || echo "Rebase abort failed, possibly not in rebase state."
+
+          # 2. Ensure we are on the original branch (checkout might be needed after abort)
+          git checkout ${{ matrix.branch }}
+
+          # 3. Define the name for the temporary branch showing upstream changes
+          CONFLICT_BRANCH="upstream-conflict/${{ matrix.branch }}-$(date +%s)"
+
+          # 4. Create the new branch starting from the upstream commit
+          #    This branch contains ONLY the upstream changes causing the conflict
+          git checkout -b $CONFLICT_BRANCH upstream/${{ matrix.branch }}
+
+          # 5. Create the Pull Request
+          echo "Creating PR from $CONFLICT_BRANCH targeting ${{ matrix.branch }}"
+          gh pr create \
+            --base ${{ matrix.branch }} \
+            --head $CONFLICT_BRANCH \
+            --title "🚨 Rebase Conflict: Review upstream changes for ${{ matrix.branch }}" \
+            --body-file .github/templates/conflict_resolution.md \
+            || echo "Failed to create PR. It might already exist for this conflict set."
+            # Using echo instead of || true for slightly better logging if gh fails
+
+          # Optional: Clean up the local temporary branch if needed (usually not necessary on runner)
+          # git checkout ${{ matrix.branch }}
+          # git branch -D $CONFLICT_BRANCH
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # gh cli might prefer GH_TOKEN
