@@ -1,29 +1,226 @@
-ARG alpine_version=3.20
-ARG S6_OVERLAY_VERSION=3.2.0.0
+# syntax=docker/dockerfile:1
+ARG alpine_version=3.21
+ARG S6_OVERLAY_VERSION=3.2.0.2
 
-FROM docker.io/alpine:${alpine_version} AS builder
+###### LIBRESPOT START ######
+FROM docker.io/alpine:${alpine_version} AS librespot
+
 RUN apk add --no-cache \
-    # LIBRESPOT
-    cargo \
     git \
-    llvm16-libs \
-    mold \
-    musl-dev\
-    pkgconfig \
-    # SNAPCAST
+    curl \
+    libgcc \
+    gcc \
+    musl-dev
+
+# Clone librespot and checkout the latest commit
+RUN git clone https://github.com/librespot-org/librespot \
+   && cd librespot \
+   && git checkout 98e9703edbeb2665c9e8e21196d382a7c81e12cd
+WORKDIR /librespot
+
+# Setup rust toolchain
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --default-toolchain nightly
+
+# Install the source code for the standard library as we re-build it with the nightly toolchain
+RUN rustup component add rust-src --toolchain nightly
+
+# Size optimizations from https://github.com/johnthagen/min-sized-rust
+# Strip debug symbols, build a static binary, optimize for size, enable thin LTO, abort on panic
+ENV RUSTFLAGS="-C strip=symbols -C target-feature=+crt-static -C opt-level=z -C embed-bitcode=true -C lto=thin -C panic=abort"
+# Use the new "sparse" protocol which speeds up the cargo index update massively
+# https://blog.rust-lang.org/inside-rust/2023/01/30/cargo-sparse-protocol.html
+ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL="sparse"
+# Disable incremental compilation
+ENV CARGO_INCREMENTAL=0
+
+# Build the binary, optimize libstd with build-std
+RUN cargo +nightly build \
+    -Z build-std=std,panic_abort \
+    -Z build-std-features="optimize_for_size,panic_immediate_abort" \
+    --release --no-default-features --features with-avahi -j $(( $(nproc) -1 ))\
+    --target x86_64-unknown-linux-musl
+
+###### LIBRESPOT END ######
+
+###### SNAPSERVER BUNDLE START ######
+FROM docker.io/alpine:${alpine_version} AS snapserver
+
+### ALSA STATIC ###
+RUN apk add --no-cache \
+    automake \
+    autoconf \
+    build-base \
+    bash \
+    git \
+    libtool \
+    linux-headers \
+    m4
+
+RUN git clone https://github.com/alsa-project/alsa-lib.git /alsa-lib
+WORKDIR /alsa-lib
+RUN libtoolize --force --copy --automake \
+    && aclocal \
+    && autoheader \
+    && automake --foreign --copy --add-missing \
+    && autoconf \
+    && ./configure --enable-shared=no --enable-static=yes CFLAGS="-ffunction-sections -fdata-sections" \
+    && make \
+    && make install
+### ALSA STATIC END ###
+
+WORKDIR /
+
+### SOXR ###
+RUN apk add --no-cache \
+    build-base \
     cmake \
-    alsa-lib-dev \
+    git
+
+RUN git clone https://github.com/chirlu/soxr.git /soxr
+WORKDIR /soxr
+RUN mkdir build \
+    && cd build \
+    && cmake -Wno-dev   -DCMAKE_BUILD_TYPE=Release \
+                        -DBUILD_SHARED_LIBS=OFF \
+                        -DWITH_OPENMP=OFF \
+                        -DBUILD_TESTS=OFF \
+                        -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+    && make -j $(( $(nproc) -1 )) \
+    && make install
+### SOXR END ###
+
+WORKDIR /
+
+### LIBEXPAT STATIC ###
+RUN apk add --no-cache \
+    build-base \
+    bash \
+    cmake \
+    git
+
+RUN git clone https://github.com/libexpat/libexpat.git /libexpat
+WORKDIR /libexpat/expat
+RUN mkdir build \
+    && cd build \
+    && cmake    -DCMAKE_BUILD_TYPE=Release \
+                -DBUILD_SHARED_LIBS=OFF \
+                -DEXPAT_BUILD_TESTS=OFF \
+                -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+    && make -j $(( $(nproc) -1 )) \
+    && make install
+### LIBEXPAT STATIC END ###
+
+WORKDIR /
+
+### LIBOPUS STATIC ###
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    git
+
+RUN git clone https://gitlab.xiph.org/xiph/opus.git /opus
+WORKDIR /opus
+RUN mkdir build \
+    && cd build \
+    && cmake    -DOPUS_BUILD_PROGRAMS=OFF \
+                -DOPUS_BUILD_TESTING=OFF \
+                -DOPUS_BUILD_SHARED_LIBRARY=OFF \
+                -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+    && make \
+    && make install
+### LIBOPUS STATIC END ###
+
+WORKDIR /
+
+### FLAC STATIC ###
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    git \
+    pkgconfig
+
+RUN git clone https://github.com/xiph/flac.git /flac
+RUN git clone https://github.com/xiph/ogg /flac/ogg
+WORKDIR /flac
+RUN mkdir build \
+    && cd build \
+    && cmake    -DBUILD_EXAMPLES=OFF \
+                -DBUILD_TESTING=OFF \
+                -DBUILD_DOCS=OFF \
+                -DINSTALL_MANPAGES=OFF \
+                -DCMAKE_CXX_FLAGS="-ffunction-sections -fdata-sections" .. \
+    && make \
+    && make install
+### FLAC STATIC END ###
+
+WORKDIR /
+
+### LIBVORBIS STATIC ###
+
+# NOTE: libvorbis requires libogg (which is built as part of the flac build)
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    git
+
+RUN git clone https://gitlab.xiph.org/xiph/vorbis.git /vorbis
+WORKDIR /vorbis
+RUN mkdir build \
+    && cd build \
+    && cmake -DCMAKE_CXX_FLAGS="-ffunction-sections -fdata-sections" .. \
+    && make \
+    && make install
+### LIBVORBIS STATIC END ###
+
+WORKDIR /
+
+### SNAPSERVER ###
+RUN apk add --no-cache \
     avahi-dev \
     bash \
+    build-base \
     boost-dev \
-    expat-dev \
-    flac-dev \
+    cmake \
     git \
-    libvorbis-dev \
     npm \
-    soxr-dev \
-    opus-dev \
-    # SHAIRPORT
+    openssl-dev
+
+RUN git clone https://github.com/badaix/snapcast.git /snapcast \
+    && cd snapcast \
+    && git checkout 9fbf273caa4bd9be66bed03e20c5f605ecdaca6d
+WORKDIR /snapcast
+RUN cmake -S . -B build \
+    -DBUILD_CLIENT=OFF \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DCMAKE_CXX_FLAGS="-s -ffunction-sections -fdata-sections -static-libgcc -static-libstdc++ -Wl,--gc-sections " \
+    && cmake --build build -j $(( $(nproc) -1 )) --verbose
+WORKDIR /
+
+# Gather all shared libaries necessary to run the executable
+RUN mkdir /snapserver-libs \
+    && ldd /snapcast/bin/snapserver | cut -d" " -f3 | xargs cp --dereference --target-directory=/snapserver-libs/
+### SNAPSERVER END ###
+
+### SNAPWEB ###
+RUN git clone https://github.com/badaix/snapweb.git
+WORKDIR /snapweb
+RUN git checkout a9180a79d9cec13b6a3454d78d854637f8d7691a
+ENV GENERATE_SOURCEMAP="false"
+RUN npm install -g npm@latest \
+    && npm ci \
+    && npm run build
+WORKDIR /
+### SNAPWEB END ###
+###### SNAPSERVER BUNDLE END ######
+
+###### SHAIRPORT BUNDLE START ######
+FROM docker.io/alpine:${alpine_version} AS shairport
+
+RUN apk add --no-cache \
     alpine-sdk \
     alsa-lib-dev \
     autoconf \
@@ -44,63 +241,10 @@ RUN apk add --no-cache \
     xmltoman \
     xxd
 
-###### LIBRESPOT START ######
-FROM builder AS librespot
-# Use faster 'mold' linker and strip debug symbols
-ENV RUSTFLAGS="-C link-args=-fuse-ld=mold -C strip=symbols"
-# Use the new "sparse" protocol which speeds up the cargo index update massively
-# https://blog.rust-lang.org/inside-rust/2023/01/30/cargo-sparse-protocol.html
-ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL="sparse"
-# Disable incremental compilation
-ENV CARGO_INCREMENTAL=0
-RUN git clone https://github.com/librespot-org/librespot \
-   && cd librespot \
-   && git checkout 299b7dec20b45b9fa19a4a46252079e8a8b7a8ba
-WORKDIR /librespot
-RUN cargo build --release --no-default-features --features with-dns-sd -j $(( $(nproc) -1 ))
-
-# Gather all shared libaries necessary to run the executable
-RUN mkdir /librespot-libs \
-    && ldd /librespot/target/release/librespot | cut -d" " -f3 | xargs cp --dereference --target-directory=/librespot-libs/
-###### LIBRESPOT END ######
-
-###### SNAPCAST BUNDLE START ######
-FROM builder AS snapcast
-
-### SNAPSERVER ###
-RUN git clone https://github.com/badaix/snapcast.git /snapcast \
-    && cd snapcast \
-    && git checkout 0a622d8441cf66c8c1d0eda9c4858687a0e87b5d
-WORKDIR /snapcast
-RUN cmake -S . -B build -DBUILD_CLIENT=OFF \
-    && cmake --build build -j $(( $(nproc) -1 )) --verbose \
-    && strip -s ./bin/snapserver
-WORKDIR /
-
-# Gather all shared libaries necessary to run the executable
-RUN mkdir /snapserver-libs \
-    && ldd /snapcast/bin/snapserver | cut -d" " -f3 | xargs cp --dereference --target-directory=/snapserver-libs/
-### SNAPSERVER END ###
-
-### SNAPWEB ###
-RUN git clone https://github.com/badaix/snapweb.git
-WORKDIR /snapweb
-RUN git checkout 66a15126578548ed544ab5b59acdece3825c2699
-ENV GENERATE_SOURCEMAP="false"
-RUN npm install -g npm@latest \
-    && npm ci \
-    && npm run build
-WORKDIR /
-### SNAPWEB END ###
-###### SNAPCAST BUNDLE END ######
-
-###### SHAIRPORT BUNDLE START ######
-FROM builder AS shairport
-
 ### NQPTP ###
 RUN git clone https://github.com/mikebrady/nqptp
 WORKDIR /nqptp
-RUN git checkout ee6663c99d95f9d25fbe07b0982a3c3b622ba0f5 \
+RUN git checkout 0742bba8ed37159b6a79d7d1321a3b83de6e0bab \
     && autoreconf -i \
     && ./configure \
     && make -j $(( $(nproc) -1 ))
@@ -110,7 +254,7 @@ WORKDIR /
 ### ALAC ###
 RUN git clone https://github.com/mikebrady/alac
 WORKDIR /alac
-RUN git checkout 34b327964c2287a49eb79b88b0ace278835ae95f \
+RUN git checkout 1832544d27d01335d823d639b176d1cae25ecfd4 \
     && autoreconf -i \
     && ./configure \
     && make -j $(( $(nproc) -1 )) \
@@ -121,7 +265,7 @@ WORKDIR /
 ### SPS ###
 RUN git clone https://github.com/mikebrady/shairport-sync.git /shairport\
     && cd /shairport \
-    && git checkout 9650990523a719768fcedd234fa5c0dcff2185ec
+    && git checkout c32256501f31f5b3913fbc2ee0dfbaf1ff1338f5
 WORKDIR /shairport/build
 RUN autoreconf -i ../ \
     && ../configure --sysconfdir=/etc \
@@ -151,8 +295,7 @@ RUN apk add --no-cache \
     fdupes
 # Copy all necessary libaries into one directory to avoid carring over duplicates
 # Removes all libaries that will be installed in the final image
-COPY --from=librespot /librespot-libs/ /tmp-libs/
-COPY --from=snapcast /snapserver-libs/ /tmp-libs/
+COPY --from=snapserver /snapserver-libs/ /tmp-libs/
 COPY --from=shairport /shairport-libs/ /tmp-libs/
 RUN fdupes -d -N /tmp-libs/ /usr/lib/
 
@@ -197,12 +340,13 @@ COPY --from=base init /init
 COPY --from=base /tmp-libs/ /usr/lib/
 
 # Copy all necessary files from the builders
-COPY --from=librespot /librespot/target/release/librespot /usr/local/bin/
-COPY --from=snapcast /snapcast/bin/snapserver /usr/local/bin/
-COPY --from=snapcast /snapcast/server/etc/plug-ins /usr/share/snapserver/plug-ins
-COPY --from=snapcast /snapweb/dist /usr/share/snapserver/snapweb
+COPY --from=librespot /librespot/target/x86_64-unknown-linux-musl/release/librespot /usr/local/bin/
+COPY --from=snapserver /snapcast/bin/snapserver /usr/local/bin/
+COPY --from=snapserver /snapweb/dist /usr/share/snapserver/snapweb
 COPY --from=shairport /shairport/build/shairport-sync /usr/local/bin/
 COPY --from=shairport /nqptp/nqptp /usr/local/bin/
+# Optional: Snapcast Plugins
+COPY --from=snapserver /snapcast/server/etc/plug-ins /usr/share/snapserver/plug-ins
 
 # Copy local files
 COPY ./s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d
