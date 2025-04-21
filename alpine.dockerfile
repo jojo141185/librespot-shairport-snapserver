@@ -340,18 +340,13 @@ COPY --from=base init /init
 COPY --from=base /tmp-libs/ /usr/lib/
 
 # Copy all necessary files from the builders
-<<<<<<< HEAD
-COPY --from=librespot /librespot/target/release/librespot /usr/local/bin/
-COPY --from=snapcast /snapcast/bin/snapserver /usr/local/bin/
-COPY --from=snapcast /snapcast/server/etc/plug-ins /usr/share/snapserver/plug-ins
-COPY --from=snapcast /snapweb/dist /usr/share/snapserver/snapweb
-=======
 COPY --from=librespot /librespot/target/x86_64-unknown-linux-musl/release/librespot /usr/local/bin/
 COPY --from=snapserver /snapcast/bin/snapserver /usr/local/bin/
 COPY --from=snapserver /snapweb/dist /usr/share/snapserver/snapweb
->>>>>>> upstream/development
 COPY --from=shairport /shairport/build/shairport-sync /usr/local/bin/
 COPY --from=shairport /nqptp/nqptp /usr/local/bin/
+# Optional: Snapcast Plugins
+COPY --from=snapserver /snapcast/server/etc/plug-ins /usr/share/snapserver/plug-ins
 
 # Copy local files
 COPY ./s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d
