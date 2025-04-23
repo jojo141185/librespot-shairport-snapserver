@@ -1,3 +1,4 @@
+# .github/workflows/publish_images.yml
 name: Build and publish Docker image
 
 on:
@@ -7,7 +8,7 @@ on:
   pull_request:
   push:
     branches:
-    - development
+    - latest
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
