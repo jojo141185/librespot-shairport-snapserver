@@ -233,7 +233,7 @@ RUN apk add --no-cache \
     libconfig-dev \
     libgcrypt-dev \
     libplist-dev \
-    libplist-utils \
+    libplist-util \
     libressl-dev \
     libsndfile-dev \
     libsodium-dev \
