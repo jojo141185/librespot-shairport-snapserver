@@ -14,8 +14,8 @@ RUN apk add --no-cache \
 
 # Clone librespot and checkout the latest commit
 RUN git clone https://github.com/librespot-org/librespot \
-   && cd librespot \
-   && git checkout dev
+    && cd librespot \
+    && git checkout dev
 WORKDIR /librespot
 
 # Setup rust toolchain
@@ -84,10 +84,10 @@ WORKDIR /soxr
 RUN mkdir build \
     && cd build \
     && cmake -Wno-dev   -DCMAKE_BUILD_TYPE=Release \
-                        -DBUILD_SHARED_LIBS=OFF \
-                        -DWITH_OPENMP=OFF \
-                        -DBUILD_TESTS=OFF \
-                        -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DWITH_OPENMP=OFF \
+    -DBUILD_TESTS=OFF \
+    -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make -j $(( $(nproc) -1 )) \
     && make install
 ### SOXR END ###
@@ -106,9 +106,9 @@ WORKDIR /libexpat/expat
 RUN mkdir build \
     && cd build \
     && cmake    -DCMAKE_BUILD_TYPE=Release \
-                -DBUILD_SHARED_LIBS=OFF \
-                -DEXPAT_BUILD_TESTS=OFF \
-                -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DEXPAT_BUILD_TESTS=OFF \
+    -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make -j $(( $(nproc) -1 )) \
     && make install
 ### LIBEXPAT STATIC END ###
@@ -126,9 +126,9 @@ WORKDIR /opus
 RUN mkdir build \
     && cd build \
     && cmake    -DOPUS_BUILD_PROGRAMS=OFF \
-                -DOPUS_BUILD_TESTING=OFF \
-                -DOPUS_BUILD_SHARED_LIBRARY=OFF \
-                -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+    -DOPUS_BUILD_TESTING=OFF \
+    -DOPUS_BUILD_SHARED_LIBRARY=OFF \
+    -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make \
     && make install
 ### LIBOPUS STATIC END ###
@@ -148,10 +148,10 @@ WORKDIR /flac
 RUN mkdir build \
     && cd build \
     && cmake    -DBUILD_EXAMPLES=OFF \
-                -DBUILD_TESTING=OFF \
-                -DBUILD_DOCS=OFF \
-                -DINSTALL_MANPAGES=OFF \
-                -DCMAKE_CXX_FLAGS="-ffunction-sections -fdata-sections" .. \
+    -DBUILD_TESTING=OFF \
+    -DBUILD_DOCS=OFF \
+    -DINSTALL_MANPAGES=OFF \
+    -DCMAKE_CXX_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make \
     && make install
 ### FLAC STATIC END ###
@@ -226,19 +226,22 @@ RUN apk add --no-cache \
     autoconf \
     automake \
     avahi-dev \
+    build-base \
     dbus \
     ffmpeg-dev \
     git \
-    libtool \
-    libdaemon-dev \
-    libplist-dev \
-    libsodium-dev \
-    libgcrypt-dev \
     libconfig-dev \
-    openssl-dev \
+    libgcrypt-dev \
+    libplist-dev \
+    libressl-dev \
+    libsndfile-dev \
+    libsodium-dev \
+    libtool \
+    pipewire-dev \
+    mosquitto-dev \
     popt-dev \
+    pulseaudio-dev \
     soxr-dev \
-    xmltoman \
     xxd
 
 ### NQPTP ###
@@ -269,13 +272,13 @@ RUN git clone https://github.com/mikebrady/shairport-sync.git /shairport\
 WORKDIR /shairport/build
 RUN autoreconf -i ../ \
     && ../configure --sysconfdir=/etc \
-                    --with-soxr \
-                    --with-avahi \
-                    --with-ssl=openssl \
-                    --with-airplay-2 \
-                    --with-stdout \
-                    --with-metadata \
-                    --with-apple-alac \
+    --with-soxr \
+    --with-avahi \
+    --with-ssl=openssl \
+    --with-airplay-2 \
+    --with-stdout \
+    --with-metadata \
+    --with-apple-alac \
     && DESTDIR=install make -j $(( $(nproc) -1 )) install
 
 WORKDIR /
@@ -315,8 +318,8 @@ ENV S6_CMD_WAIT_FOR_SERVICES=1
 ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 
 RUN apk add --no-cache \
-            avahi \
-            dbus \
+    avahi \
+    dbus \
     && rm -rf /lib/apk/db/*
 
 RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
