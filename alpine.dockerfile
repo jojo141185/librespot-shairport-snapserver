@@ -351,7 +351,7 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 # Use edge/testing only when necessary, prefer stable if possible
-# RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
 RUN apk add --no-cache \
     # Install python dependencies for control scripts
