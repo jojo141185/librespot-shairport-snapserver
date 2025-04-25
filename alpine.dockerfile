@@ -3,6 +3,8 @@ ARG alpine_version=3.21
 ARG S6_OVERLAY_VERSION=3.2.0.2
 
 ###### LIBRESPOT START ######
+# Accept the target platform as an argument
+ARG TARGETPLATFORM
 FROM docker.io/alpine:${alpine_version} AS librespot
 
 RUN apk add --no-cache \
@@ -37,11 +39,23 @@ ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL="sparse"
 ENV CARGO_INCREMENTAL=0
 
 # Build the binary, optimize libstd with build-std
-RUN cargo +nightly build \
+# Determine Rust target dynamically based on TARGETPLATFORM
+RUN export TARGETARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
+    && case ${TARGETARCH} in \
+    amd64) RUST_TARGET=x86_64-unknown-linux-musl ;; \
+    arm64) RUST_TARGET=aarch64-unknown-linux-musl ;; \
+    arm/v7) RUST_TARGET=armv7-unknown-linux-musleabihf ;; \
+    *) echo >&2 "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+    esac \
+    && echo "Building librespot for ${RUST_TARGET} (TARGETPLATFORM: ${TARGETPLATFORM})" \
+    && cargo +nightly build \
     -Z build-std=std,panic_abort \
     -Z build-std-features="optimize_for_size,panic_immediate_abort" \
     --release --no-default-features --features with-avahi -j $(( $(nproc) -1 ))\
-    --target x86_64-unknown-linux-musl
+    --target ${RUST_TARGET} \
+    # Copy artifact to a fixed location for easier final copy
+    && mkdir -p /app/bin \
+    && cp target/${RUST_TARGET}/release/librespot /app/bin/
 
 ###### LIBRESPOT END ######
 
@@ -202,7 +216,7 @@ WORKDIR /
 
 # Gather all shared libaries necessary to run the executable
 RUN mkdir /snapserver-libs \
-    && ldd /snapcast/bin/snapserver | cut -d" " -f3 | xargs cp --dereference --target-directory=/snapserver-libs/
+    && ldd /snapcast/bin/snapserver | grep "=> /" | awk '{print $3}' | xargs -I '{}' cp --dereference '{}' /snapserver-libs/
 ### SNAPSERVER END ###
 
 ### SNAPWEB ###
@@ -222,6 +236,7 @@ FROM docker.io/alpine:${alpine_version} AS shairport
 
 RUN apk add --no-cache \
     alpine-sdk \
+    pkgconf \
     alsa-lib-dev \
     autoconf \
     automake \
@@ -234,7 +249,7 @@ RUN apk add --no-cache \
     libgcrypt-dev \
     libplist-dev \
     libplist-util \
-    libressl-dev \
+    openssl-dev \
     libsndfile-dev \
     libsodium-dev \
     libtool \
@@ -286,11 +301,13 @@ WORKDIR /
 
 # Gather all shared libaries necessary to run the executable
 RUN mkdir /shairport-libs \
-    && ldd /shairport/build/shairport-sync | cut -d" " -f3 | xargs cp --dereference --target-directory=/shairport-libs/
+    && ldd /shairport/build/install/usr/local/bin/shairport-sync | grep "=> /" | awk '{print $3}' | xargs -I '{}' cp --dereference '{}' /shairport-libs/
 ### SPS END ###
 ###### SHAIRPORT BUNDLE END ######
 
 ###### BASE START ######
+# Accept TARGETARCH
+ARG TARGETARCH
 FROM docker.io/alpine:${alpine_version} AS base
 ARG S6_OVERLAY_VERSION
 RUN apk add --no-cache \
@@ -301,13 +318,23 @@ RUN apk add --no-cache \
 # Removes all libaries that will be installed in the final image
 COPY --from=snapserver /snapserver-libs/ /tmp-libs/
 COPY --from=shairport /shairport-libs/ /tmp-libs/
-RUN fdupes -d -N /tmp-libs/ /usr/lib/
+# Use -N to avoid prompting on duplicates ---
+RUN fdupes -rdN /tmp-libs/
 
-# Install s6
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz \
-    https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp/
-RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
-    && tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz \
+# Install s6-overlay dynamically based on TARGETARCH ---
+RUN apk add --no-cache --virtual .fetch-deps curl \
+    && case ${TARGETARCH} in \
+    amd64) S6_ARCH=x86_64 ;; \
+    arm64) S6_ARCH=aarch64 ;; \
+    arm/v7) S6_ARCH=armhf ;; \
+    *) echo >&2 "Unsupported architecture for S6: ${TARGETARCH}" && exit 1 ;; \
+    esac \
+    && echo "Downloading S6 overlay for arch ${S6_ARCH}" \
+    && curl -o /tmp/s6-overlay-noarch.tar.xz -L https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz \
+    && curl -o /tmp/s6-overlay-arch.tar.xz -L https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${S6_ARCH}.tar.xz \
+    && tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
+    && tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz \
+    && apk del .fetch-deps \
     && rm -rf /tmp/*
 
 ###### BASE END ######
@@ -321,9 +348,10 @@ ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 RUN apk add --no-cache \
     avahi \
     dbus \
-    && rm -rf /lib/apk/db/*
+    && rm -rf /var/cache/apk/*
 
-RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
+# Use edge/testing only when necessary, prefer stable if possible
+# RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
 
 RUN apk add --no-cache \
     # Install python dependencies for control scripts
@@ -331,10 +359,12 @@ RUN apk add --no-cache \
     py3-pip \
     py3-gobject3 \
     py3-mpd2@testing \
+    #py3-mpd2 \
     py3-musicbrainzngs\
     py3-websocket-client\
     py3-requests\
-    && rm -rf /lib/apk/db/*
+    # Clean apk cache
+    && rm -rf /var/cache/apk/*
 
 # Copy extracted s6-overlay and libs from base
 COPY --from=base /command /command/
@@ -344,16 +374,17 @@ COPY --from=base init /init
 COPY --from=base /tmp-libs/ /usr/lib/
 
 # Copy all necessary files from the builders
-COPY --from=librespot /librespot/target/x86_64-unknown-linux-musl/release/librespot /usr/local/bin/
+COPY --from=librespot /app/bin/librespot /usr/local/bin/
 COPY --from=snapserver /snapcast/bin/snapserver /usr/local/bin/
 COPY --from=snapserver /snapweb/dist /usr/share/snapserver/snapweb
-COPY --from=shairport /shairport/build/shairport-sync /usr/local/bin/
+COPY --from=shairport /shairport/build/install/usr/local/bin/shairport-sync /usr/local/bin/
 COPY --from=shairport /nqptp/nqptp /usr/local/bin/
 # Optional: Snapcast Plugins
 COPY --from=snapserver /snapcast/server/etc/plug-ins /usr/share/snapserver/plug-ins
 
 # Copy local files
 COPY ./s6-overlay/s6-rc.d /etc/s6-overlay/s6-rc.d
+# Ensure script is executable
 RUN chmod +x /etc/s6-overlay/s6-rc.d/01-startup/script.sh
 
 RUN mkdir -p /var/run/dbus/
