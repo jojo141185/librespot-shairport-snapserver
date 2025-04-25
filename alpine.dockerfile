@@ -3,9 +3,8 @@ ARG alpine_version=3.21
 ARG S6_OVERLAY_VERSION=3.2.0.2
 
 ###### LIBRESPOT START ######
-# Accept the target platform as an argument
-ARG TARGETPLATFORM
 FROM docker.io/alpine:${alpine_version} AS librespot
+ARG TARGETPLATFORM
 
 RUN apk add --no-cache \
     git \
@@ -40,7 +39,7 @@ ENV CARGO_INCREMENTAL=0
 
 # Build the binary, optimize libstd with build-std
 # Determine Rust target dynamically based on TARGETPLATFORM
-RUN echo ">>> DEBUG: Received TARGETPLATFORM='${TARGETPLATFORM}'" \
+RUN echo ">>> DEBUG Librespot Stage: Received TARGETPLATFORM='${TARGETPLATFORM}'" \
     && export TARGETARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && echo ">>> DEBUG: Derived TARGETARCH='${TARGETARCH}'" \
     && case ${TARGETARCH} in \
@@ -308,10 +307,10 @@ RUN mkdir /shairport-libs \
 ###### SHAIRPORT BUNDLE END ######
 
 ###### BASE START ######
-# Accept TARGETARCH
-ARG TARGETARCH
 FROM docker.io/alpine:${alpine_version} AS base
+ARG TARGETARCH
 ARG S6_OVERLAY_VERSION
+
 RUN apk add --no-cache \
     avahi \
     dbus \
@@ -325,11 +324,12 @@ RUN fdupes -rdN /tmp-libs/
 
 # Install s6-overlay dynamically based on TARGETARCH
 RUN apk add --no-cache --virtual .fetch-deps curl \
+    && echo ">>> DEBUG Base Stage: TARGETARCH='${TARGETARCH}'" \
     && case ${TARGETARCH} in \
     amd64) S6_ARCH=x86_64 ;; \
     arm64) S6_ARCH=aarch64 ;; \
     arm/v7) S6_ARCH=armhf ;; \
-    *) echo >&2 "Unsupported architecture for S6: ${TARGETARCH}" && exit 1 ;; \
+    *) echo >&2 "!!! ERROR: Unsupported architecture for S6: '${TARGETARCH}'" && exit 1 ;; \
     esac \
     && echo "Downloading S6 overlay for arch ${S6_ARCH}" \
     && curl -o /tmp/s6-overlay-noarch.tar.xz -L https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz \
