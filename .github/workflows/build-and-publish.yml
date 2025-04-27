@@ -285,7 +285,7 @@ jobs:
           echo "Adding FULL description annotation: ${DESCRIPTION_FULL}"
 
           docker buildx imagetools create \
-            --annotation "org.opencontainers.image.description=${DESCRIPTION_FULL}" \
+            --annotation "index:org.opencontainers.image.description=${DESCRIPTION_FULL}" \
             ${TAG_OPTS} \
             ${REFS}
         shell: bash
