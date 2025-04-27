@@ -347,7 +347,10 @@ RUN apk add --no-cache --virtual .fetch-deps curl \
 
 ###### MAIN BASE START ######
 # Intermediate stage with common runtime components for both final images
-FROM base AS main-base
+FROM docker.io/alpine:${alpine_version} AS main-base
+
+ENV S6_CMD_WAIT_FOR_SERVICES=1
+ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 
 # Install common runtime dependencies (excluding Python)
 RUN apk add --no-cache \
@@ -385,9 +388,6 @@ RUN chmod +x /etc/s6-overlay/s6-rc.d/01-startup/script.sh
 # Final stage for the "slim" image (without Python/Plugins)
 FROM main-base AS slim
 
-ENV S6_CMD_WAIT_FOR_SERVICES=1
-ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
-
 # No Python installation or plugin copy here
 
 # Final image setup
@@ -400,9 +400,6 @@ ENTRYPOINT ["/init"]
 # Final stage for the "full" image (with Python/Plugins)
 # This is the default target if --target is not specified during build
 FROM main-base AS full
-
-ENV S6_CMD_WAIT_FOR_SERVICES=1
-ENV S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 
 # Add Python-specific dependencies
 RUN echo "@testing https://dl-cdn.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories \
