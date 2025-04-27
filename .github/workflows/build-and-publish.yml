@@ -308,7 +308,7 @@ jobs:
           echo "Adding SLIM description annotation: ${DESCRIPTION_SLIM}"
 
           docker buildx imagetools create \
-            --annotation "org.opencontainers.image.description=${DESCRIPTION_SLIM}" \
+            --annotation "index:org.opencontainers.image.description=${DESCRIPTION_SLIM}" \
             ${TAG_OPTS} \
             ${REFS}
         shell: bash
