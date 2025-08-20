@@ -13,9 +13,11 @@ RUN apk add --no-cache \
     curl \
     libgcc \
     gcc \
-    musl-dev
+    musl-dev \
+    pkgconf
 
-# Clone librespot and checkout the specific commit
+# Get the latest version of the librespot source code
+# DEV: Use the development branch for librespot
 RUN git clone https://github.com/librespot-org/librespot \
     && cd librespot \
     && git checkout dev
@@ -39,7 +41,7 @@ ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL="sparse"
 # Disable incremental compilation
 ENV CARGO_INCREMENTAL=0
 
-# Build the binary, optimize libstd with build-std
+# Build the binary
 # Determine Rust target dynamically based on TARGETPLATFORM
 RUN echo ">>> DEBUG Librespot Stage: Received TARGETPLATFORM='${TARGETPLATFORM}'" \
     && export TARGETARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
@@ -52,9 +54,7 @@ RUN echo ">>> DEBUG Librespot Stage: Received TARGETPLATFORM='${TARGETPLATFORM}'
     esac \
     && echo "Building librespot for ${RUST_TARGET} (TARGETPLATFORM: ${TARGETPLATFORM})" \
     && cargo +nightly build \
-    -Z build-std=std,panic_abort \
-    -Z build-std-features="optimize_for_size,panic_immediate_abort" \
-    --release --no-default-features --features with-avahi -j $(nproc) \
+    --release --no-default-features --features "with-avahi,rustls-tls-native-roots" -j $(nproc) \
     --target ${RUST_TARGET} \
     # Copy artifact to a fixed location for easier final copy
     && mkdir -p /app/bin \
@@ -77,7 +77,11 @@ RUN apk add --no-cache \
     linux-headers \
     m4
 
-RUN git clone https://github.com/alsa-project/alsa-lib.git /alsa-lib
+# Clone and check out the latest release tag
+RUN git clone https://github.com/alsa-project/alsa-lib.git /alsa-lib \
+    && cd /alsa-lib \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 WORKDIR /alsa-lib
 RUN libtoolize --force --copy --automake \
     && aclocal \
@@ -97,7 +101,11 @@ RUN apk add --no-cache \
     cmake \
     git
 
-RUN git clone https://github.com/chirlu/soxr.git /soxr
+# Clone and check out the latest release tag
+RUN git clone https://github.com/chirlu/soxr.git /soxr \
+    && cd /soxr \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 WORKDIR /soxr
 RUN mkdir build \
     && cd build \
@@ -119,7 +127,11 @@ RUN apk add --no-cache \
     cmake \
     git
 
-RUN git clone https://github.com/libexpat/libexpat.git /libexpat
+# Clone and check out the latest release tag
+RUN git clone https://github.com/libexpat/libexpat.git /libexpat \
+    && cd /libexpat \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 WORKDIR /libexpat/expat
 RUN mkdir build \
     && cd build \
@@ -139,7 +151,11 @@ RUN apk add --no-cache \
     cmake \
     git
 
-RUN git clone https://gitlab.xiph.org/xiph/opus.git /opus
+# Clone and check out the latest release tag
+RUN git clone https://gitlab.xiph.org/xiph/opus.git /opus \
+    && cd /opus \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 WORKDIR /opus
 RUN mkdir build \
     && cd build \
@@ -160,7 +176,11 @@ RUN apk add --no-cache \
     git \
     pkgconfig
 
-RUN git clone https://github.com/xiph/flac.git /flac
+# Clone and check out the latest release tag
+RUN git clone https://github.com/xiph/flac.git /flac \
+    && cd /flac \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 RUN git clone https://github.com/xiph/ogg /flac/ogg
 WORKDIR /flac
 RUN mkdir build \
@@ -184,7 +204,11 @@ RUN apk add --no-cache \
     cmake \
     git
 
-RUN git clone https://gitlab.xiph.org/xiph/vorbis.git /vorbis
+# Clone and check out the latest release tag
+RUN git clone https://gitlab.xiph.org/xiph/vorbis.git /vorbis \
+    && cd /vorbis \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 WORKDIR /vorbis
 RUN mkdir build \
     && cd build \
@@ -206,6 +230,7 @@ RUN apk add --no-cache \
     npm \
     openssl-dev
 
+# DEV: Use the development branch for snapcast
 RUN git clone https://github.com/badaix/snapcast.git /snapcast \
     && cd snapcast \
     && git checkout develop
@@ -224,6 +249,7 @@ RUN mkdir /snapserver-libs \
 ### SNAPSERVER END ###
 
 ### SNAPWEB ###
+# DEV: Use the development branch for snapweb
 RUN git clone https://github.com/badaix/snapweb.git
 WORKDIR /snapweb
 RUN git checkout develop
@@ -266,20 +292,26 @@ RUN apk add --no-cache \
     xxd
 
 ### NQPTP ###
-RUN git clone https://github.com/mikebrady/nqptp
+# Clone and check out the latest release tag
+RUN git clone https://github.com/mikebrady/nqptp \
+    && cd nqptp \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 WORKDIR /nqptp
-RUN git checkout development \
-    && autoreconf -i \
+RUN autoreconf -i \
     && ./configure \
     && make -j $(( $(nproc) -1 ))
 WORKDIR /
 ### NQPTP END ###
 
 ### ALAC ###
-RUN git clone https://github.com/mikebrady/alac
+# Clone and check out the latest release tag
+RUN git clone https://github.com/mikebrady/alac \
+    && cd alac \
+    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+    && git checkout $LATEST_TAG
 WORKDIR /alac
-RUN git checkout master \
-    && autoreconf -i \
+RUN autoreconf -i \
     && ./configure \
     && make -j $(( $(nproc) -1 )) \
     && make install
@@ -287,6 +319,7 @@ WORKDIR /
 ### ALAC END ###
 
 ### SPS ###
+# DEV: Use the development branch for shairport-sync
 RUN git clone https://github.com/mikebrady/shairport-sync.git /shairport \
     && cd /shairport \
     && git checkout development
