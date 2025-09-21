@@ -1,12 +1,16 @@
 # syntax=docker/dockerfile:1
-ARG alpine_version=3.21
-ARG S6_OVERLAY_VERSION=3.2.0.2
+ARG alpine_version=3.22.1
+ARG S6_OVERLAY_VERSION=3.2.1.0
+# Define the build version argument. Default to 'release' for local builds.
+# Possible values: stable, release, pre-release, latest, develop
+ARG BUILD_VERSION=release
 
 ###### LIBRESPOT START ######
 # Build stage for librespot
 FROM docker.io/alpine:${alpine_version} AS librespot
 # Declare ARG inside the stage
 ARG TARGETPLATFORM
+ARG BUILD_VERSION
 
 RUN apk add --no-cache \
     git \
@@ -16,12 +20,27 @@ RUN apk add --no-cache \
     musl-dev \
     pkgconf
 
-# Clone librespot and checkout the latest release tag
+# Clone librespot and checkout the version based on BUILD_VERSION
 RUN git clone https://github.com/librespot-org/librespot \
     && cd librespot \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && echo ">>> Checking out librespot version: ${LATEST_TAG}" \
-    && git checkout ${LATEST_TAG}
+    && echo ">>> Checking out librespot source for BUILD_VERSION: ${BUILD_VERSION}" \
+    && case ${BUILD_VERSION} in \
+        stable) \
+            git checkout 0e5531ff5483dc57fc7557325ceec13b2e486732 ;; \
+        release) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE 'alpha|beta|rc|-' | head -n 1) \
+            && git checkout ${LATEST_STABLE_TAG} ;; \
+        pre-release) \
+            LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+            && git checkout ${LATEST_TAG} ;; \
+        latest) \
+            git checkout master ;; \
+        develop) \
+            git checkout dev ;; \
+       *) echo >&2 "!!! ERROR: Unsupported BUILD_VERSION: '${BUILD_VERSION}' for librespot" && exit 1 ;; \
+    esac \
+    && echo ">>> Using librespot version: $(git describe --always --tags)"
+
 WORKDIR /librespot
 
 # Setup rust toolchain
@@ -55,7 +74,9 @@ RUN echo ">>> DEBUG Librespot Stage: Received TARGETPLATFORM='${TARGETPLATFORM}'
     esac \
     && echo "Building librespot for ${RUST_TARGET} (TARGETPLATFORM: ${TARGETPLATFORM})" \
     && cargo +nightly build \
-    --release --no-default-features --features with-avahi -j $(nproc) \
+    -Z build-std=std,panic_abort \
+    -Z build-std-features="optimize_for_size,panic_immediate_abort" \
+    --release --no-default-features --features "with-avahi rustls-tls-webpki-roots" -j $(nproc) \
     --target ${RUST_TARGET} \
     # Copy artifact to a fixed location for easier final copy
     && mkdir -p /app/bin \
@@ -66,32 +87,38 @@ RUN echo ">>> DEBUG Librespot Stage: Received TARGETPLATFORM='${TARGETPLATFORM}'
 ###### SNAPSERVER BUNDLE START ######
 # Build stage for snapserver and its dependencies
 FROM docker.io/alpine:${alpine_version} AS snapserver
+ARG BUILD_VERSION
 
 ### ALSA STATIC ###
-RUN apk add --no-cache \
-    automake \
-    autoconf \
-    build-base \
-    bash \
-    git \
-    libtool \
-    linux-headers \
-    m4
-
-# Clone and check out the latest release tag
-RUN git clone https://github.com/alsa-project/alsa-lib.git /alsa-lib \
-    && cd /alsa-lib \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
-WORKDIR /alsa-lib
-RUN libtoolize --force --copy --automake \
-    && aclocal \
-    && autoheader \
-    && automake --foreign --copy --add-missing \
-    && autoconf \
-    && ./configure --enable-shared=no --enable-static=yes CFLAGS="-ffunction-sections -fdata-sections" \
-    && make -j $(( $(nproc) -1 )) \
-    && make install
+# Disable ALSA static build as of https://github.com/alsa-project/alsa-lib/pull/459 static build on musl is broken
+# RUN apk add --no-cache \
+#     automake \
+#     autoconf \
+#     build-base \
+#     bash \
+#     git \
+#     libtool \
+#     linux-headers \
+#     m4
+#
+# Clone and check out the version based on BUILD_VERSION
+# RUN git clone https://github.com/alsa-project/alsa-lib.git /alsa-lib \
+#    && cd /alsa-lib \
+#    && echo ">>> Checking out alsa-lib source for BUILD_VERSION: ${BUILD_VERSION}" \
+#    && case ${BUILD_VERSION} in \
+#        *) \
+#            git checkout master ;; \
+#    esac \
+#    && echo ">>> Using alsa-lib version: $(git describe --always --tags)"
+# WORKDIR /alsa-lib
+# RUN libtoolize --force --copy --automake \
+#    && aclocal \
+#    && autoheader \
+#    && automake --foreign --copy --add-missing \
+#    && autoconf \
+#    && ./configure --enable-shared=no --enable-static=yes CFLAGS="-ffunction-sections -fdata-sections" \
+#    && make -j $(( $(nproc) -1 )) \
+#    && make install
 ### ALSA STATIC END ###
 
 WORKDIR /
@@ -102,19 +129,18 @@ RUN apk add --no-cache \
     cmake \
     git
 
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/chirlu/soxr.git /soxr \
     && cd /soxr \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && git checkout master
 WORKDIR /soxr
 RUN mkdir build \
     && cd build \
     && cmake -Wno-dev   -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DWITH_OPENMP=OFF \
-    -DBUILD_TESTS=OFF \
-    -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+                        -DBUILD_SHARED_LIBS=OFF \
+                        -DWITH_OPENMP=OFF \
+                        -DBUILD_TESTS=OFF \
+                        -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make -j $(( $(nproc) -1 )) \
     && make install
 ### SOXR END ###
@@ -128,18 +154,17 @@ RUN apk add --no-cache \
     cmake \
     git
 
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/libexpat/libexpat.git /libexpat \
     && cd /libexpat \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && git checkout master
 WORKDIR /libexpat/expat
 RUN mkdir build \
     && cd build \
     && cmake    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DEXPAT_BUILD_TESTS=OFF \
-    -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+                -DBUILD_SHARED_LIBS=OFF \
+                -DEXPAT_BUILD_TESTS=OFF \
+                -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make -j $(( $(nproc) -1 )) \
     && make install
 ### LIBEXPAT STATIC END ###
@@ -152,18 +177,17 @@ RUN apk add --no-cache \
     cmake \
     git
 
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://gitlab.xiph.org/xiph/opus.git /opus \
     && cd /opus \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && git checkout main
 WORKDIR /opus
 RUN mkdir build \
     && cd build \
     && cmake    -DOPUS_BUILD_PROGRAMS=OFF \
-    -DOPUS_BUILD_TESTING=OFF \
-    -DOPUS_BUILD_SHARED_LIBRARY=OFF \
-    -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
+                -DOPUS_BUILD_TESTING=OFF \
+                -DOPUS_BUILD_SHARED_LIBRARY=OFF \
+                -DCMAKE_C_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make -j $(( $(nproc) -1 )) \
     && make install
 ### LIBOPUS STATIC END ###
@@ -177,20 +201,21 @@ RUN apk add --no-cache \
     git \
     pkgconfig
 
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/xiph/flac.git /flac \
     && cd /flac \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
-RUN git clone https://github.com/xiph/ogg /flac/ogg
+    && git checkout master
+RUN git clone https://github.com/xiph/ogg /flac/ogg \
+    && cd /flac/ogg \
+    && git checkout main
 WORKDIR /flac
 RUN mkdir build \
     && cd build \
     && cmake    -DBUILD_EXAMPLES=OFF \
-    -DBUILD_TESTING=OFF \
-    -DBUILD_DOCS=OFF \
-    -DINSTALL_MANPAGES=OFF \
-    -DCMAKE_CXX_FLAGS="-ffunction-sections -fdata-sections" .. \
+                -DBUILD_TESTING=OFF \
+                -DBUILD_DOCS=OFF \
+                -DINSTALL_MANPAGES=OFF \
+                -DCMAKE_CXX_FLAGS="-ffunction-sections -fdata-sections" .. \
     && make \
     && make install
 ### FLAC STATIC END ###
@@ -205,11 +230,10 @@ RUN apk add --no-cache \
     cmake \
     git
 
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://gitlab.xiph.org/xiph/vorbis.git /vorbis \
     && cd /vorbis \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && git checkout main
 WORKDIR /vorbis
 RUN mkdir build \
     && cd build \
@@ -222,6 +246,7 @@ WORKDIR /
 
 ### SNAPSERVER ###
 RUN apk add --no-cache \
+    alsa-lib-dev \
     avahi-dev \
     bash \
     build-base \
@@ -231,11 +256,26 @@ RUN apk add --no-cache \
     npm \
     openssl-dev
 
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/badaix/snapcast.git /snapcast \
     && cd snapcast \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && echo ">>> Checking out snapcast source for BUILD_VERSION: ${BUILD_VERSION}" \
+    && case ${BUILD_VERSION} in \
+        stable) \
+            git checkout 37984c16a101945fe2b52da9c98dbe8073b2a57b ;; \
+        release) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE 'alpha|beta|rc|-' | head -n 1) \
+            && git checkout ${LATEST_STABLE_TAG} ;; \
+        pre-release) \
+            LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+            && git checkout ${LATEST_TAG} ;; \
+        latest) \
+            git checkout master ;; \
+        develop) \
+            git checkout develop ;; \
+       *) echo >&2 "!!! ERROR: Unsupported BUILD_VERSION: '${BUILD_VERSION}' for snapcast" && exit 1 ;; \
+    esac \
+    && echo ">>> Using snapcast version: $(git describe --always --tags)"
 WORKDIR /snapcast
 RUN cmake -S . -B build \
     -DBUILD_CLIENT=OFF \
@@ -251,11 +291,26 @@ RUN mkdir /snapserver-libs \
 ### SNAPSERVER END ###
 
 ### SNAPWEB ###
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/badaix/snapweb.git \
     && cd snapweb \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && echo ">>> Checking out snapweb source for BUILD_VERSION: ${BUILD_VERSION}" \
+    && case ${BUILD_VERSION} in \
+        stable) \
+            git checkout f899725fd5b3f103da6c5c53420e6755b4524104 ;; \
+        release) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE 'alpha|beta|rc|-' | head -n 1) \
+            && git checkout ${LATEST_STABLE_TAG} ;; \
+        pre-release) \
+            LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+            && git checkout ${LATEST_TAG} ;; \
+        latest) \
+            git checkout master ;; \
+        develop) \
+            git checkout develop ;; \
+       *) echo >&2 "!!! ERROR: Unsupported BUILD_VERSION: '${BUILD_VERSION}' for snapweb" && exit 1 ;; \
+    esac \
+    && echo ">>> Using snapweb version: $(git describe --always --tags)"
 WORKDIR /snapweb
 ENV GENERATE_SOURCEMAP="false"
 RUN npm install -g npm@latest \
@@ -268,6 +323,7 @@ WORKDIR /
 ###### SHAIRPORT BUNDLE START ######
 # Build stage for shairport-sync and its dependencies
 FROM docker.io/alpine:${alpine_version} AS shairport
+ARG BUILD_VERSION
 
 RUN apk add --no-cache \
     alpine-sdk \
@@ -280,7 +336,6 @@ RUN apk add --no-cache \
     ffmpeg-dev \
     git \
     libtool \
-    libdaemon-dev \
     libplist-dev \
     libplist-util \
     libsodium-dev \
@@ -289,15 +344,32 @@ RUN apk add --no-cache \
     openssl-dev \
     popt-dev \
     soxr-dev \
+    xxd \
+    # Only Necessary for build from 'master'
+    libdaemon-dev \
     xmltoman \
-    xxd
+    # Necessary for 'development' build, which uses Pipewire
+    build-base \
+    libsndfile-dev \
+    pipewire-dev \
+    mosquitto-dev \
+    pulseaudio-dev
+
 
 ### NQPTP ###
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/mikebrady/nqptp \
     && cd nqptp \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && echo ">>> Checking out nqptp source for BUILD_VERSION: ${BUILD_VERSION}" \
+    && case ${BUILD_VERSION} in \
+        stable) \
+            git checkout c82f64ffd02d88a4961953b50ec392090032592c ;; \
+        develop) \
+            git checkout development ;; \
+        *) \
+            git checkout main ;; \
+    esac \
+    && echo ">>> Using nqptp version: $(git describe --always --tags)"
 WORKDIR /nqptp
 RUN autoreconf -i \
     && ./configure \
@@ -306,11 +378,17 @@ WORKDIR /
 ### NQPTP END ###
 
 ### ALAC ###
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/mikebrady/alac \
     && cd alac \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && echo ">>> Checking out alac source for BUILD_VERSION: ${BUILD_VERSION}" \
+    && case ${BUILD_VERSION} in \
+        stable) \
+            git checkout 1832544d27d01335d823d639b176d1cae25ecfd4 ;; \
+        *) \
+            git checkout master ;; \
+    esac \
+    && echo ">>> Using alac version: $(git describe --always --tags)"
 WORKDIR /alac
 RUN autoreconf -i \
     && ./configure \
@@ -320,21 +398,36 @@ WORKDIR /
 ### ALAC END ###
 
 ### SPS ###
-# Clone and check out the latest release tag
+# Clone and check out the version based on BUILD_VERSION
 RUN git clone https://github.com/mikebrady/shairport-sync.git /shairport \
     && cd /shairport \
-    && LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
-    && git checkout $LATEST_TAG
+    && echo ">>> Checking out shairport-sync source for BUILD_VERSION: ${BUILD_VERSION}" \
+    && case ${BUILD_VERSION} in \
+        stable) \
+            git checkout a56d090fef1ad7e1aa58121f05faa5816cc2fee6 ;; \
+        release) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE 'alpha|beta|rc|-' | head -n 1) \
+            && git checkout ${LATEST_STABLE_TAG} ;; \
+        pre-release) \
+            LATEST_TAG=$(git describe --tags `git rev-list --tags --max-count=1`) \
+            && git checkout ${LATEST_TAG} ;; \
+        latest) \
+            git checkout master ;; \
+        develop) \
+            git checkout development ;; \
+       *) echo >&2 "!!! ERROR: Unsupported BUILD_VERSION: '${BUILD_VERSION}' for shairport-sync" && exit 1 ;; \
+    esac \
+    && echo ">>> Using shairport-sync version: $(git describe --always --tags)"
 WORKDIR /shairport/build
 RUN autoreconf -i ../ \
     && ../configure --sysconfdir=/etc \
-    --with-soxr \
-    --with-avahi \
-    --with-ssl=openssl \
-    --with-airplay-2 \
-    --with-stdout \
-    --with-metadata \
-    --with-apple-alac \
+                    --with-soxr \
+                    --with-avahi \
+                    --with-ssl=openssl \
+                    --with-airplay-2 \
+                    --with-stdout \
+                    --with-metadata \
+                    --with-apple-alac \
     && DESTDIR=install make -j $(( $(nproc) -1 )) install
 
 WORKDIR /
