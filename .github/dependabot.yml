@@ -7,7 +7,7 @@ updates:
     day: sunday
     time: "10:00"
   open-pull-requests-limit: 10
-  target-branch: development
+  target-branch: master
 - package-ecosystem: docker
   directory: "/"
   schedule:
@@ -15,4 +15,4 @@ updates:
     day: sunday
     time: "10:00"
   open-pull-requests-limit: 10
-  target-branch: development
+  target-branch: master

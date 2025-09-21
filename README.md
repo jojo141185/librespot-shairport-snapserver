@@ -32,7 +32,7 @@ Each version is available in two variants:
 | `stable`, `stable-slim` | **Recommended for most users.** A highly reproducible build from specific, tested commit hashes of the main components. Provides the greatest stability. | Pinned commit hashes |
 | `latest`, `latest-slim` | A stable version built from the latest official releases of the main components or their `master` branches. Updated weekly and on new releases. | Latest stable releases |
 | `vX.Y.Z`, `vX.Y.Z-slim` | **Immutable, stable releases.** These tags correspond to a specific Git tag of this repository and provide a fixed, non-changing version of the image. | Git Tag `vX.Y.Z` |
-| `development`, `development-slim` | **Bleeding-edge builds.** Built from the `HEAD` of the `development` branches of the main components. Contains the newest features but may be unstable. Updated weekly. | `develop` branches |
+| `develop`, `develop-slim` | **Bleeding-edge builds.** Built from the `HEAD` of the `development` branches of the main components. Contains the newest features but may be unstable. Updated weekly. | `develop` branches |
 | `pre-release`, `pre-release-slim` | Tracks the absolute latest chronological tag from the main components, including alphas, betas, and release candidates. | Latest pre-release tags |
 
 ---
@@ -83,7 +83,7 @@ You can build the image locally using `docker build`. The build process is contr
   - `release`: Builds from the latest stable tags of the main components.
   - `pre-release`: Builds from the absolute latest tags (including alphas/betas).
   - `latest`: Builds from the `master`/`main` branches.
-  - `develop`: Builds from the `develop`/`development` branches.
+  - `develop`: Builds from the `development` branches.
 
 ### Build Examples
 

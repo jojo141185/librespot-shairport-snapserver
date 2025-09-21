@@ -301,8 +301,8 @@ jobs:
             type=semver,pattern={{major}},enable=${{ github.event_name == 'release' }}
             # Tag master branch push OR any tag/release OR a scheduled 'latest' build as 'latest'
             type=raw,value=latest,enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
-            # Tag a scheduled 'develop' build as 'development'
-            type=raw,value=development,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
+            # Tag a scheduled 'develop' build as 'develop'
+            type=raw,value=develop,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
             # Tag manual workflow_dispatch runs with SHA (that are not 'latest' or 'develop')
             type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
 
@@ -328,8 +328,8 @@ jobs:
             type=semver,pattern={{major}}{{flavor}},enable=${{ github.event_name == 'release' }}
             # Tag master branch push OR any tag/release OR a scheduled 'latest' build as 'latest-slim'
             type=raw,value=latest{{flavor}},enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
-            # Tag a scheduled 'develop' build as 'development-slim'
-            type=raw,value=development{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
+            # Tag a scheduled 'develop' build as 'develop-slim'
+            type=raw,value=develop{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
             # Tag manual workflow_dispatch runs with SHA-slim (that are not 'latest' or 'develop')
             type=sha,suffix={{flavor}},enable=${{ github.event_name == 'workflow_dispatch' }}
 
