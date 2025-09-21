@@ -1,62 +1,53 @@
 # librespot-shairport-snapserver
 
-Alpine-based Docker image for running the **snapserver** part of [snapcast](https://github.com/badaix/snapcast) with  
-[**librespot**](https://github.com/librespot-org/librespot) and [**shairport-sync**](https://github.com/mikebrady/shairport-sync) as inputs.
+Alpine-based Docker image for running the **snapserver** part of [snapcast](https://github.com/badaix/snapcast) with [**librespot**](https://github.com/librespot-org/librespot) (Spotify Connect) and [**shairport-sync**](https://github.com/mikebrady/shairport-sync) (AirPlay 2) as audio sources.
 
-Idea adapted from [librespot-snapserver](https://github.com/djmaze/librespot-snapserver) and based on the  
-[shairport-sync Docker image](https://github.com/mikebrady/shairport-sync/tree/master/docker).
-
-**Background:** When this project started, the latest releases of *snapcast* and *librespot* were behind their  
- respective `develop` branches. Therefore, everything is compiled from source using specific tested commits from the development branches.
+This project provides a flexible, multi-arch, and automatically updated image that compiles all components from source to ensure up-to-date features and maximum compatibility.
 
 > **Note:** The corresponding Docker image for running `snapclient` can be found here:  
 > [yubiuser/snapclient-docker](https://github.com/yubiuser/snapclient-docker)
 
 ---
 
-## Docker Images
+## Features
 
-Multi-arch Docker images (`linux/amd64`, `linux/arm64`) for `librespot`, `shairport-sync`, and `snapserver` are published to the [GitHub Container Registry (GHCR)](https://github.com/jojo141185?tab=packages&repo_name=librespot-shairport-snapserver). Docker will automatically pull the correct architecture.
+- **Multi-Arch Support:** Images are built for `linux/amd64` and `linux/arm64`. Docker will automatically pull the correct architecture.
+- **Full & Slim Variants:** Choose between a full-featured image with Python tools or a minimal `slim` image for reduced size.
+- **Multiple Stability Channels:** Tags are provided for stable releases, pre-releases, and development branches.
+- **Automated Builds:** The images are automatically built and updated by GitHub Actions based on upstream changes and new releases.
+- **All-in-One:** Combines Snapcast server, Spotify Connect, and AirPlay 2 support into a single, easy-to-use image.
 
 ---
 
-### Development Image Variants
+## Available Docker Tags
 
-These images are built from the **`development`** branch. They contain the latest ongoing changes and may not be stable.  
+All images are published to the [GitHub Container Registry (GHCR)](https://github.com/jojo141185/librespot-shairport-snapserver/pkgs/container/librespot-shairport-snapserver).
 
-> **Note:** For stable releases follow the instructions on [master](https://github.com/jojo141185/librespot-shairport-snapserver/tree/master) branch. Pushing to `master` or creating a release produces tags like `latest`, `latest-slim`, `vX.Y.Z`, and `vX.Y.Z-slim`.
->
-#### 1. Full Development Version (`development`)
+Each version is available in two variants:
+- **Full (default):** Includes all components plus a full Python environment with useful dependencies.
+- **Slim (suffixed with `-slim`):** Includes all core components but **excludes** Python and related tools for a smaller footprint.
 
-- Represents the latest development state of the **full-featured** image.  
-- Contains `snapserver`, `librespot`, `shairport-sync` **plus** a full Python installation and dependencies.  
-- **Tag:** `development`  
-- **Pull:**  
-
-  ```bash
-  docker pull ghcr.io/jojo141185/librespot-shairport-snapserver:development
-  ```
-
-#### 2. Slim Development Version (`development-slim`)
-
-- Represents the latest development state of the **minimal** image.  
-- Contains `snapserver`, `librespot`, and `shairport-sync` but **excludes** Python and related tools.  
-- **Tag:** `development-slim`  
-- **Pull:**  
-
-  ```bash
-  docker pull ghcr.io/jojo141185/librespot-shairport-snapserver:development-slim
-  ```
+| Tag(s) | Description | Source Code Version |
+| :--- | :--- | :--- |
+| `stable`, `stable-slim` | **Recommended for most users.** A highly reproducible build from specific, tested commit hashes of the main components. Provides the greatest stability. | Pinned commit hashes |
+| `latest`, `latest-slim` | A stable version built from the latest official releases of the main components or their `master` branches. Updated weekly and on new releases. | Latest stable releases |
+| `vX.Y.Z`, `vX.Y.Z-slim` | **Immutable, stable releases.** These tags correspond to a specific Git tag of this repository and provide a fixed, non-changing version of the image. | Git Tag `vX.Y.Z` |
+| `development`, `development-slim` | **Bleeding-edge builds.** Built from the `HEAD` of the `development` branches of the main components. Contains the newest features but may be unstable. Updated weekly. | `develop` branches |
+| `pre-release`, `pre-release-slim` | Tracks the absolute latest chronological tag from the main components, including alphas, betas, and release candidates. | Latest pre-release tags |
 
 ---
 
 ## Usage Examples
 
-### Using the Full Development Image
+### Using Docker Run
+
+For most users, the `stable` tag is the best choice.
 
 ```bash
-docker pull ghcr.io/jojo141185/librespot-shairport-snapserver:development
-docker run -d --rm --net host   -v ./snapserver.conf:/etc/snapserver.conf   --name snapserver ghcr.io/jojo141185/librespot-shairport-snapserver:development
+docker pull ghcr.io/jojo141185/librespot-shairport-snapserver:stable
+docker run -d --rm --net host \
+  -v ./snapserver.conf:/etc/snapserver.conf \
+  --name snapserver ghcr.io/jojo141185/librespot-shairport-snapserver:stable
 ```
 
 ### Using with docker-compose
@@ -64,15 +55,17 @@ docker run -d --rm --net host   -v ./snapserver.conf:/etc/snapserver.conf   --na
 ```yml
 services:
   snapcast:
-    image: ghcr.io/jojo141185/librespot-shairport-snapserver:development
-    # or slim version:
-    # image: ghcr.io/jojo141185/librespot-shairport-snapserver:development-slim
+    image: ghcr.io/jojo141185/librespot-shairport-snapserver:stable
+    # Or use a slim version:
+    # image: ghcr.io/jojo141185/librespot-shairport-snapserver:stable-slim
+    # Or a specific version for stability:
+    # image: ghcr.io/jojo141185/librespot-shairport-snapserver:v1.2.3
     container_name: snapcast
     restart: unless-stopped
     network_mode: host
     volumes:
       - ./snapserver.conf:/etc/snapserver.conf
-      # Example FIFO mapping if needed
+      # Example FIFO mapping if needed for other sources
       # - /tmp/snapfifo:/tmp/snapfifo
 ```
 
@@ -82,21 +75,38 @@ services:
 
 ## Building Locally
 
-To build the image locally simply run:
+You can build the image locally using `docker build`. The build process is controlled by the `BUILD_VERSION` argument to select which source code versions to compile.
+
+### Build Arguments
+- **`BUILD_VERSION`**: Controls the build strategy. Default is `release`.
+  - `stable`: Builds from the hardcoded commit hashes (recommended).
+  - `release`: Builds from the latest stable tags of the main components.
+  - `pre-release`: Builds from the absolute latest tags (including alphas/betas).
+  - `latest`: Builds from the `master`/`main` branches.
+  - `develop`: Builds from the `develop`/`development` branches.
+
+### Build Examples
 
 ```bash
-docker build -t librespot-shairport-snapserver:local -f ./alpine.dockerfile .
+# Build the recommended 'stable' version
+docker build \
+  --build-arg BUILD_VERSION=stable \
+  -t my-snapserver:local-stable -f ./alpine.dockerfile .
+
+# Build the 'slim' image from the development branches
+docker build \
+  --target slim \
+  --build-arg BUILD_VERSION=develop \
+  -t my-snapserver:slim-dev -f ./alpine.dockerfile .
 ```
 
 ---
 
 ## Notes
 
-- Based on Alpine 3.21; final image size is ~200 MB (full version); ~120 MB (slim version).  
-- All CMake builds use `-j $(( $(nproc) - 1 ))` to leave one CPU free for normal operation.  
-- Uses [s6-overlay](https://github.com/just-containers/s6-overlay) as `init` system:  
-  - Required by [NQPTP](https://github.com/mikebrady/nqptp) companion for shairport-sync.  
-  - Services launched via `s6-rc` with proper dependencies (snapserver starts last).  
-  - Uses `s6-notifyoncheck` to wait on `dbus` and `avahi` readiness. The actual check is performed by sending `dbus`messages and analyzing the reply.
-- Adjust `snapserver.conf` as needed (AirPlay 2 uses port 7000).  
-- [Snapweb](https://github.com/badaix/snapweb) is included and available at `http://<snapserver-host>:1780`.  
+- Based on Alpine 3.22; final image size is ~200 MB (full version); ~120 MB (slim version).
+- All CMake builds use `-j $(( $(nproc) - 1 ))` to leave one CPU core free for normal operation.
+- Uses [s6-overlay](https://github.com/just-containers/s6-overlay) as an `init` system for robust service management.
+- Services are launched with proper dependencies (e.g., waiting for `dbus` and `avahi` before starting).
+- Adjust `snapserver.conf` as needed. Note that AirPlay 2 uses additional ports starting from 7000.
+- The [Snapweb](https://github.com/badaix/snapweb) UI is included and available at `http://<snapserver-host>:1780`.
