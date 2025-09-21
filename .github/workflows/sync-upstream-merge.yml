@@ -53,20 +53,21 @@ jobs:
           # Ensure we start from the state pushed to origin
           echo "Resetting local ${{ matrix.branch }} to origin/${{ matrix.branch }} state..."
           git reset --hard origin/${{ matrix.branch }}
-
-          # Check if already up-to-date
-          if git merge-base --is-ancestral upstream/${{ matrix.branch }} HEAD; then
+          # Check if already up-to-date or ahead
+          # upstream/${{ matrix.branch }} is an ancestor of HEAD -> means HEAD is up-to-date or ahead
+          echo "Checking if HEAD is already up-to-date or ahead of upstream/${{ matrix.branch }}..."
+          if git merge-base --is-ancestor upstream/${{ matrix.branch }} HEAD; then
              echo "✅ Branch '${{ matrix.branch }}' is already up-to-date or ahead of upstream/${{ matrix.branch }}. No merge needed."
              echo "outcome=success" >> $GITHUB_OUTPUT
              exit 0
           fi
-
           # Perform the merge - This respects .gitattributes merge=ours for .github/**
           # The merge commit is created automatically if successful without conflicts
           echo "Performing merge..."
-          git merge --no-edit upstream/${{ matrix.branch }} -m "Merge upstream/${{ matrix.branch }} into ${{ matrix.branch }}"
+          # Use --no-ff to always create a merge commit for tracking sync history
+          # Use --no-edit to accept the default merge commit message
+          git merge --no-ff --no-edit upstream/${{ matrix.branch }} -m "Merge upstream/${{ matrix.branch }} into ${{ matrix.branch }}"
           MERGE_EXIT_CODE=$?
-
           if [ $MERGE_EXIT_CODE -ne 0 ]; then
              echo "::error::Merge command failed with exit code $MERGE_EXIT_CODE. Conflicts likely."
              echo "Aborting failed merge attempt..."
