@@ -72,7 +72,6 @@ jobs:
   build:
     # Dieser Job wird nicht direkt vom schedule-Trigger ausgeführt
     if: github.event_name != 'schedule'
-    needs: trigger-scheduled-builds # Stellt sicher, dass dieser Job erst nach den Triggern evaluiert wird
     # Dynamic job name includes variant and platform
     name: Build ${{ matrix.variant }} on ${{ matrix.platform }}
     runs-on: ubuntu-latest
