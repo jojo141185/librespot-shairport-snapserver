@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         # Define the branches in your fork to sync with upstream
-        branch: [development, master] # Sync both branches using merge strategy
+        branch: [master] # Sync both branches using merge strategy
 
     steps:
       # Step 1: Checkout the repository branch using PAT
