@@ -3,7 +3,7 @@ name: Build and Publish Docker Images
 
 on:
   schedule:
-    # Führt den Workflow jeden Sonntag um 03:00 UTC aus
+    # Run the workflow every Sunday at 03:00 UTC
     - cron: '0 3 * * 0'
   workflow_dispatch:
     inputs:
@@ -44,7 +44,7 @@ permissions:
 jobs:
   trigger-scheduled-builds:
     name: Trigger weekly ${{ matrix.build_version }} build
-    # Dieser Job läuft NUR auf den schedule-Trigger
+    # This job only runs on the schedule trigger
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     strategy:
@@ -53,7 +53,7 @@ jobs:
     steps:
       - name: Trigger workflow for ${{ matrix.build_version }}
         uses: actions/github-script@v7
-        # Überschreibe env-Variable GITHUB_TOKEN mit PAT, der Berechtigung hat workflows zu starten
+        # Override GITHUB_TOKEN env variable with a PAT that has permissions to trigger workflows
         env:
           GITHUB_TOKEN: ${{ secrets.ACTIONS_WORKFLOW_PAT }}
         with:
@@ -69,9 +69,42 @@ jobs:
             })
             console.log('Successfully triggered workflow dispatch for build_version: ${{ matrix.build_version }}')
 
+  pr-validation-build:
+    name: PR Build (${{ matrix.build_version }}) on amd64
+    # This job only runs for Pull Requests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build_version: [stable, latest, develop]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for multi-platform builds
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for validation
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./alpine.dockerfile
+          platforms: linux/amd64
+          target: full
+          build-args: |
+            BUILD_VERSION=${{ matrix.build_version }}
+          # Important: Do not push, only build
+          push: false
+          cache-from: type=gha,scope=pr-${{ github.event.pull_request.number }}-${{ matrix.build_version }}
+          cache-to: type=gha,scope=pr-${{ github.event.pull_request.number }}-${{ matrix.build_version }},mode=max
+
   build:
-    # Dieser Job wird nicht direkt vom schedule-Trigger ausgeführt
-    if: github.event_name != 'schedule'
+    # This job does NOT run for schedule OR pull_request events
+    if: github.event_name != 'schedule' && github.event_name != 'pull_request'
     # Dynamic job name includes variant and platform
     name: Build ${{ matrix.variant }} on ${{ matrix.platform }}
     runs-on: ubuntu-latest
@@ -290,7 +323,7 @@ jobs:
           images: ${{ env.REGISTRY_IMAGE }} # Base image name for default/full tags
           tags: |
             # === Event-specific tags ===
-            # Push to branch: tag manifest with branch name (master, development)
+            # Push to branch: tag manifest with branch name
             type=ref,event=branch,pattern={{branch}},enable=${{ github.event_name == 'push' && github.ref_type == 'branch' }}
             # Push of a tag OR Release event: tag manifest with Git tag/release tag
             type=ref,event=tag,pattern={{tag}},enable=${{ (github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'release' }}
@@ -298,11 +331,14 @@ jobs:
             type=semver,pattern={{version}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}},enable=${{ github.event_name == 'release' }}
-            # Tag master branch push OR any tag/release OR a scheduled 'latest' build as 'latest'
-            type=raw,value=latest,enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
-            # Tag a scheduled 'develop' build as 'develop'
+            # === Manual & Scheduled Build Tags ===
+            type=raw,value=stable,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'stable' }}
+            type=raw,value=release,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'release' }}
+            type=raw,value=pre-release,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'pre-release' }}
             type=raw,value=develop,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
-            # Tag manual workflow_dispatch runs with SHA (that are not 'latest' or 'develop')
+            # Tag master branch push OR any tag/release OR a scheduled/manual 'latest' build as 'latest'
+            type=raw,value=latest,enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
+            # Tag ANY manual workflow_dispatch run with its SHA for traceability
             type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       # --- Metadata for SLIM manifest ---
@@ -317,7 +353,7 @@ jobs:
           # Define the tags explicitly again (DUPLICATED from above)
           tags: |
             # === Event-specific tags ===
-            # Push to branch: tag manifest with branch name (master, development)
+            # Push to branch: tag manifest with branch name
             type=ref,event=branch,pattern={{branch}}{{flavor}},enable=${{ github.event_name == 'push' && github.ref_type == 'branch' }}
             # Push of a tag OR Release event: tag manifest with Git tag/release tag
             type=ref,event=tag,pattern={{tag}}{{flavor}},enable=${{ (github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'release' }}
@@ -325,11 +361,14 @@ jobs:
             type=semver,pattern={{version}}{{flavor}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}.{{minor}}{{flavor}},enable=${{ github.event_name == 'release' }}
             type=semver,pattern={{major}}{{flavor}},enable=${{ github.event_name == 'release' }}
-            # Tag master branch push OR any tag/release OR a scheduled 'latest' build as 'latest-slim'
-            type=raw,value=latest{{flavor}},enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
-            # Tag a scheduled 'develop' build as 'develop-slim'
+            # === Manual & Scheduled Build Tags ===
+            type=raw,value=stable{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'stable' }}
+            type=raw,value=release{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'release' }}
+            type=raw,value=pre-release{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'pre-release' }}
             type=raw,value=develop{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
-            # Tag manual workflow_dispatch runs with SHA-slim (that are not 'latest' or 'develop')
+            # Tag master branch push OR any tag/release OR a scheduled/manual 'latest' build as 'latest-slim'
+            type=raw,value=latest{{flavor}},enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
+            # Tag ANY manual workflow_dispatch run with its SHA-slim for traceability
             type=sha,suffix={{flavor}},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Log in to GitHub Container Registry (ghcr.io)
