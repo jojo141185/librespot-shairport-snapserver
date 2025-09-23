@@ -18,6 +18,8 @@ on:
           - pre-release
           - latest
           - develop
+          - all
+
   release:
     types: [published]          # on new release publish
   pull_request:
@@ -54,6 +56,33 @@ jobs:
       - name: Trigger workflow for ${{ matrix.build_version }}
         uses: actions/github-script@v7
         # Override GITHUB_TOKEN env variable with a PAT that has permissions to trigger workflows
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACTIONS_WORKFLOW_PAT }}
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build-and-publish.yml',
+              ref: 'master',
+              inputs: {
+                build_version: '${{ matrix.build_version }}'
+              }
+            })
+            console.log('Successfully triggered workflow dispatch for build_version: ${{ matrix.build_version }}')
+
+  # job to handle the 'all' option
+  trigger-all-builds:
+    name: Trigger all builds
+    # This job only runs when 'all' is selected manually
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'all'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_version: [stable, release, pre-release, latest, develop]
+    steps:
+      - name: Trigger workflow for ${{ matrix.build_version }}
+        uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.ACTIONS_WORKFLOW_PAT }}
         with:
@@ -120,8 +149,11 @@ jobs:
           cache-to: type=gha,scope=pr-${{ github.event.pull_request.number }}-${{ matrix.build_version }},mode=max
 
   build:
-    # This job does NOT run for schedule OR pull_request events
-    if: github.event_name != 'schedule' && github.event_name != 'pull_request'
+    # This job runs for push, release, and individual manual dispatches, but not for PRs, schedules, or the 'all' trigger.
+    if: |
+      github.event_name != 'schedule' &&
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.build_version != 'all')
     # Dynamic job name includes variant and platform
     name: Build ${{ matrix.variant }} on ${{ matrix.platform }}
     runs-on: ubuntu-latest
@@ -163,11 +195,9 @@ jobs:
         run: |
           VERSION="stable" # Default value
           if [ "${{ github.event_name }}" = "release" ]; then
-            if [ "${{ github.event.release.prerelease }}" = "true" ]; then
-              VERSION="pre-release"
-            else
-              VERSION="release"
-            fi
+          # A GitHub Release of this repository should always build the 'stable' version
+          # which is based on the pinned, tested commit hashes.
+              VERSION="stable"
           elif [ "${{ github.event_name }}" = "push" ]; then
             if [ "${{ github.ref_name }}" = "master" ]; then
               VERSION="latest"
@@ -278,6 +308,7 @@ jobs:
       && github.event_name != 'pull_request'
       && github.actor != 'dependabot[bot]'
       && github.event_name != 'schedule'
+      && (github.event_name != 'workflow_dispatch' || github.event.inputs.build_version != 'all')
     permissions:
       contents: read
       packages: write
@@ -353,8 +384,8 @@ jobs:
             type=raw,value=release,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'release' }}
             type=raw,value=pre-release,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'pre-release' }}
             type=raw,value=develop,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
-            # Tag master branch push OR any tag/release OR a scheduled/manual 'latest' build as 'latest'
-            type=raw,value=latest,enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
+            # Tag master branch push, a stable release, OR a manual 'latest' build as 'latest'
+            type=raw,value=latest,enable=${{ github.ref_name == 'master' || (github.event_name == 'release' && github.event.release.prerelease == false) || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
             # Tag ANY manual workflow_dispatch run with its SHA for traceability
             type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
 
@@ -383,8 +414,8 @@ jobs:
             type=raw,value=release{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'release' }}
             type=raw,value=pre-release{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'pre-release' }}
             type=raw,value=develop{{flavor}},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'develop' }}
-            # Tag master branch push OR any tag/release OR a scheduled/manual 'latest' build as 'latest-slim'
-            type=raw,value=latest{{flavor}},enable=${{ github.ref_name == 'master' || github.ref_type == 'tag' || github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
+            # Tag master branch push, a stable release, OR a manual 'latest' build
+            type=raw,value=latest{{flavor}},enable=${{ github.ref_name == 'master' || (github.event_name == 'release' && github.event.release.prerelease == false) || (github.event_name == 'workflow_dispatch' && github.event.inputs.build_version == 'latest') }}
             # Tag ANY manual workflow_dispatch run with its SHA-slim for traceability
             type=sha,suffix={{flavor}},enable=${{ github.event_name == 'workflow_dispatch' }}
 
