@@ -30,10 +30,11 @@ Each version is available in two variants:
 | Tag(s) | Description | Source Code Version |
 | :--- | :--- | :--- |
 | `stable`, `stable-slim` | **Recommended for most users.** A highly reproducible build from specific, tested commit hashes of the main components. Provides the greatest stability. | Pinned commit hashes |
-| `latest`, `latest-slim` | A stable version built from the latest official releases of the main components or their `master` branches. Updated weekly and on new releases. | Latest stable releases |
-| `vX.Y.Z`, `vX.Y.Z-slim` | **Immutable, stable releases.** These tags correspond to a specific Git tag of this repository and provide a fixed, non-changing version of the image. | Git Tag `vX.Y.Z` |
-| `develop`, `develop-slim` | **Bleeding-edge builds.** Built from the `HEAD` of the `development` branches of the main components. Contains the newest features but may be unstable. Updated weekly. | `develop` branches |
+| `release`, `release-slim` | Tracks the latest official release tag (excluding pre-releases) from the main components. | Latest release tags |
 | `pre-release`, `pre-release-slim` | Tracks the absolute latest chronological tag from the main components, including alphas, betas, and release candidates. | Latest pre-release tags |
+| `latest`, `latest-slim` | **Bleeding-edge builds.** A stable version built from the latest official releases of the main components or their `master` branches. Updated weekly and on new releases. | Latest stable releases |
+| `develop`, `develop-slim` | **Bleeding-edge dev builds.** Built from the `HEAD` of the `development` branches of the main components. Contains the newest features but may be unstable. Updated weekly. | `develop` branches |
+| `vX.Y.Z`, `vX.Y.Z-slim` | **Immutable, stable releases.** These tags correspond to a specific Git tag of this repository and provide a fixed, non-changing version of the image. | Git Tag `vX.Y.Z` |
 
 ---
 
@@ -41,7 +42,7 @@ Each version is available in two variants:
 
 ### Using Docker Run
 
-For most users, the `stable` tag is the best choice.
+For most users, the `stable` or `release` tag is the best choice.
 
 ```bash
 docker pull ghcr.io/jojo141185/librespot-shairport-snapserver:stable
