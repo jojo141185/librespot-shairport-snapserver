@@ -178,7 +178,8 @@ RUN apk add --no-cache \
     git
 
 # Clone and check out the version based on BUILD_VERSION
-RUN git clone https://gitlab.xiph.org/xiph/opus.git /opus \
+# Github mirror of: https://gitlab.xiph.org/xiph/opus.git (more reliable)
+RUN git clone https://github.com/xiph/opus.git /opus \
     && cd /opus \
     && git checkout main
 WORKDIR /opus
@@ -231,7 +232,8 @@ RUN apk add --no-cache \
     git
 
 # Clone and check out the version based on BUILD_VERSION
-RUN git clone https://gitlab.xiph.org/xiph/vorbis.git /vorbis \
+# Github mirror of: https://gitlab.xiph.org/xiph/vorbis.git (more reliable)
+RUN git clone https://github.com/xiph/vorbis.git /vorbis \
     && cd /vorbis \
     && git checkout main
 WORKDIR /vorbis
