@@ -28,10 +28,10 @@ RUN git clone https://github.com/librespot-org/librespot \
         stable) \
             git checkout 0e5531ff5483dc57fc7557325ceec13b2e486732 ;; \
         release) \
-            LATEST_STABLE_TAG=$(git tag --sort=-committerdate | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
             && git checkout ${LATEST_STABLE_TAG} ;; \
         pre-release) \
-            LATEST_TAG=$(git tag --sort=-committerdate | grep -vE 'dev' | head -n 1) \
+            LATEST_TAG=$(git tag --sort=-v:refname | grep -vE 'dev' | head -n 1) \
             && git checkout ${LATEST_TAG} ;; \
         latest) \
             git checkout master ;; \
@@ -266,10 +266,10 @@ RUN git clone https://github.com/badaix/snapcast.git /snapcast \
         stable) \
             git checkout 37984c16a101945fe2b52da9c98dbe8073b2a57b ;; \
         release) \
-            LATEST_STABLE_TAG=$(git tag --sort=-committerdate | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
             && git checkout ${LATEST_STABLE_TAG} ;; \
         pre-release) \
-            LATEST_TAG=$(git tag --sort=-committerdate | grep -vE 'dev' | head -n 1) \
+            LATEST_TAG=$(git tag --sort=-v:refname | grep -vE 'dev' | head -n 1) \
             && git checkout ${LATEST_TAG} ;; \
         latest) \
             git checkout master ;; \
@@ -301,10 +301,10 @@ RUN git clone https://github.com/badaix/snapweb.git \
         stable) \
             git checkout f899725fd5b3f103da6c5c53420e6755b4524104 ;; \
         release) \
-            LATEST_STABLE_TAG=$(git tag --sort=-committerdate | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
             && git checkout ${LATEST_STABLE_TAG} ;; \
         pre-release) \
-            LATEST_TAG=$(git tag --sort=-committerdate | grep -vE 'dev' | head -n 1) \
+            LATEST_TAG=$(git tag --sort=-v:refname | grep -vE 'dev' | head -n 1) \
             && git checkout ${LATEST_TAG} ;; \
         latest) \
             git checkout master ;; \
@@ -408,10 +408,10 @@ RUN git clone https://github.com/mikebrady/shairport-sync.git /shairport \
         stable) \
             git checkout a56d090fef1ad7e1aa58121f05faa5816cc2fee6 ;; \
         release) \
-            LATEST_STABLE_TAG=$(git tag --sort=-committerdate | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
+            LATEST_STABLE_TAG=$(git tag --sort=-v:refname | grep -vE '(V|v)2' | grep -vE 'alpha|beta|rc|dev|-' | head -n 1) \
             && git checkout ${LATEST_STABLE_TAG} ;; \
         pre-release) \
-            LATEST_TAG=$(git tag --sort=-committerdate | grep -vE 'dev' | head -n 1) \
+            LATEST_TAG=$(git tag --sort=-v:refname | grep -vE '(V|v)2' | grep -vE 'dev' | head -n 1) \
             && git checkout ${LATEST_TAG} ;; \
         latest) \
             git checkout master ;; \
