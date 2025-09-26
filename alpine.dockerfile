@@ -73,12 +73,12 @@ RUN echo ">>> DEBUG Librespot Stage: Received TARGETPLATFORM='${TARGETPLATFORM}'
         *) echo >&2 "!!! ERROR: Unsupported architecture: '${TARGETARCH}' (derived from TARGETPLATFORM: '${TARGETPLATFORM}')" && exit 1 ;; \
     esac \
     && echo "Building librespot for ${RUST_TARGET} (TARGETPLATFORM: ${TARGETPLATFORM})" \
-    && RUSTFLAGS="-Z unstable-options -Cpanic=immediate-abort" \
-       cargo +nightly build \
-       -Z build-std=std,panic_abort \
-       -Z build-std-features=optimize_for_size \
-       --release --no-default-features --features "with-avahi rustls-tls-webpki-roots" -j $(nproc) \
-       --target ${RUST_TARGET} \
+    && RUSTFLAGS="-C panic=abort" \
+        cargo +nightly build \
+        -Z build-std=std,panic_abort \
+        -Z build-std-features=optimize_for_size \
+        --release --no-default-features --features "with-avahi rustls-tls-webpki-roots" -j $(nproc) \
+        --target ${RUST_TARGET} \
     # Copy artifact to a fixed location for easier final copy
     && mkdir -p /app/bin \
     && cp target/${RUST_TARGET}/release/librespot /app/bin/
