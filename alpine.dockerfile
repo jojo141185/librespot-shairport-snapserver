@@ -67,17 +67,18 @@ RUN echo ">>> DEBUG Librespot Stage: Received TARGETPLATFORM='${TARGETPLATFORM}'
     && export TARGETARCH=$(echo ${TARGETPLATFORM} | cut -d / -f2) \
     && echo ">>> DEBUG: Derived TARGETARCH='${TARGETARCH}'" \
     && case ${TARGETARCH} in \
-    amd64)  RUST_TARGET=x86_64-unknown-linux-musl ;; \
-    arm64)  RUST_TARGET=aarch64-unknown-linux-musl ;; \
-    arm/v7) RUST_TARGET=armv7-unknown-linux-musleabihf ;; \
-    *) echo >&2 "!!! ERROR: Unsupported architecture: '${TARGETARCH}' (derived from TARGETPLATFORM: '${TARGETPLATFORM}')" && exit 1 ;; \
+        amd64)  RUST_TARGET=x86_64-unknown-linux-musl ;; \
+        arm64)  RUST_TARGET=aarch64-unknown-linux-musl ;; \
+        arm/v7) RUST_TARGET=armv7-unknown-linux-musleabihf ;; \
+        *) echo >&2 "!!! ERROR: Unsupported architecture: '${TARGETARCH}' (derived from TARGETPLATFORM: '${TARGETPLATFORM}')" && exit 1 ;; \
     esac \
     && echo "Building librespot for ${RUST_TARGET} (TARGETPLATFORM: ${TARGETPLATFORM})" \
-    && cargo +nightly build \
-    -Z build-std=std,panic_abort \
-    -Z build-std-features="optimize_for_size,panic_immediate_abort" \
-    --release --no-default-features --features "with-avahi rustls-tls-webpki-roots" -j $(nproc) \
-    --target ${RUST_TARGET} \
+    && RUSTFLAGS="-Z unstable-options -Cpanic=immediate-abort" \
+       cargo +nightly build \
+       -Z build-std=std,panic_abort \
+       -Z build-std-features=optimize_for_size \
+       --release --no-default-features --features "with-avahi rustls-tls-webpki-roots" -j $(nproc) \
+       --target ${RUST_TARGET} \
     # Copy artifact to a fixed location for easier final copy
     && mkdir -p /app/bin \
     && cp target/${RUST_TARGET}/release/librespot /app/bin/
